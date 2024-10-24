@@ -1,3 +1,4 @@
+from typing import Dict, Any, List, Tuple
 import asyncio
 import logging
 
@@ -25,6 +26,7 @@ from homeassistant.const import (
     UnitOfTemperature,
 )
 from homeassistant.core import HomeAssistant, Event, EventStateChangedData, callback
+import homeassistant.core as ha_core
 from homeassistant.helpers.event import async_track_state_change_event, async_call_later
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -48,8 +50,27 @@ CONF_HUMIDITY_SENSOR = "humidity_sensor"
 CONF_POWER_SENSOR = "power_sensor"
 CONF_POWER_SENSOR_DELAY = "power_sensor_delay"
 CONF_POWER_SENSOR_RESTORE_STATE = "power_sensor_restore_state"
+CONF_TEMPERATURE_OFFSET = "temperature_offset"
 
 PRECISION_DOUBLE = 2
+
+def temperature_offset_validator(value: Any) -> dict:
+    """Validate the temperature offset configuration."""
+    if not isinstance(value, dict):
+        raise vol.Invalid("Temperature offset must be a dictionary")
+    
+    result = {}
+    for mode, offset in value.items():
+        try:
+            # Remove any '+' signs before converting to float
+            if isinstance(offset, str):
+                offset = offset.replace('+', '')
+            result[str(mode)] = float(offset)
+            _LOGGER.debug("Validated temperature offset for mode %s: %s", mode, result[str(mode)])
+        except (TypeError, ValueError) as err:
+            raise vol.Invalid(f"Invalid offset value for mode {mode}: {err}")
+    
+    return result
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     {
@@ -65,6 +86,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
             CONF_POWER_SENSOR_DELAY, default=DEFAULT_POWER_SENSOR_DELAY
         ): cv.positive_int,
         vol.Optional(CONF_POWER_SENSOR_RESTORE_STATE, default=True): cv.boolean,
+        vol.Optional(CONF_TEMPERATURE_OFFSET, default=dict): dict,
     }
 )
 
@@ -73,7 +95,11 @@ async def async_setup_platform(
     hass: HomeAssistant, config: ConfigType, async_add_entities, discovery_info=None
 ):
     """Set up the IR Climate platform."""
-    _LOGGER.debug("Setting up the SmartIR climate platform")
+    _LOGGER.debug("Starting SmartIR climate platform setup")
+    
+    # Log the raw config
+    _LOGGER.debug("Raw config received: %s", config)
+    
     if not (
         device_data := await DeviceData.load_file(
             config.get(CONF_DEVICE_CODE),
@@ -87,8 +113,34 @@ async def async_setup_platform(
         _LOGGER.error("SmartIR climate device data init failed!")
         return
 
-    async_add_entities([SmartIRClimate(hass, config, device_data)])
+    operation_modes = device_data.get("operationModes", [])
+    temperature_offset = config.get(CONF_TEMPERATURE_OFFSET, {})
+    
+    _LOGGER.debug(
+        "Setup - Temperature offsets: %s, Operation modes: %s",
+        temperature_offset,
+        operation_modes
+    )
 
+    # Process temperature offsets
+    processed_offsets = {}
+    for mode, offset in temperature_offset.items():
+        if mode not in operation_modes:
+            _LOGGER.error("Invalid mode in temperature_offset: %s", mode)
+            continue
+        try:
+            if isinstance(offset, str):
+                offset = offset.replace('+', '')
+            processed_offsets[mode] = float(offset)
+            _LOGGER.debug("Processed offset for mode %s: %s", mode, processed_offsets[mode])
+        except (ValueError, TypeError) as ex:
+            _LOGGER.error("Failed to process offset for mode %s: %s", mode, ex)
+
+    # Update config with processed offsets
+    config[CONF_TEMPERATURE_OFFSET] = processed_offsets
+    _LOGGER.debug("Final processed temperature offsets: %s", processed_offsets)
+
+    async_add_entities([SmartIRClimate(hass, config, device_data)])
 
 class SmartIRClimate(ClimateEntity, RestoreEntity):
     _attr_should_poll = False
@@ -113,6 +165,21 @@ class SmartIRClimate(ClimateEntity, RestoreEntity):
         self._power_sensor_delay = config.get(CONF_POWER_SENSOR_DELAY)
         self._power_sensor_restore_state = config.get(CONF_POWER_SENSOR_RESTORE_STATE)
         self._temperature_unit = hass.config.units.temperature_unit
+        # Get the processed temperature offsets
+        self._temperature_offset = config.get(CONF_TEMPERATURE_OFFSET, {})
+        _LOGGER.debug("Climate entity initialized with temperature offsets: %s", self._temperature_offset)
+    
+        cleaned_offsets = {}
+        for mode, offset in self._temperature_offset.items():
+            try:
+                if isinstance(offset, str):
+                    offset = offset.replace('+', '')
+                cleaned_offsets[mode] = float(offset)
+                _LOGGER.debug("Stored temperature offset for mode %s: %s", mode, cleaned_offsets[mode])
+            except (ValueError, TypeError) as ex:
+                _LOGGER.error("Failed to process offset for mode %s: %s", mode, ex)
+        
+        self._temperature_offset = cleaned_offsets
 
         self._state = STATE_OFF
         self._hvac_mode = None
@@ -136,6 +203,7 @@ class SmartIRClimate(ClimateEntity, RestoreEntity):
         self._supported_controller = device_data["supportedController"]
         self._commands_encoding = device_data["commandsEncoding"]
         self._commands = device_data["commands"]
+        self._temperature_offset = device_data.get("temperature_offset", {})
 
         # current temperature sensor precision
         self._ha_temperature_unit = hass.config.units.temperature_unit
@@ -700,16 +768,49 @@ class SmartIRClimate(ClimateEntity, RestoreEntity):
                             return
 
                     if isinstance(commands, dict):
+                        # Add the temperature offset code here
+                        offset = 0
+                        _LOGGER.debug("Current mode: %s, Available offsets: %s", hvac_mode, self._temperature_offset)
+                        
+                        if hvac_mode in self._temperature_offset:
+                            offset = self._temperature_offset[hvac_mode]  # Should already be a float
+                            _LOGGER.debug(
+                                "Applying temperature offset of %s for mode %s",
+                                offset,
+                                hvac_mode,
+                            )
+                        else:
+                            _LOGGER.debug(
+                                "No temperature offset found for mode %s. Available offsets: %s",
+                                hvac_mode,
+                                self._temperature_offset,
+                            )
+
+                        # Apply offset to the temperature with limits
+                        if temperature != "-":
+                            adjusted_temperature = temperature + offset
+                            # Ensure adjusted temperature stays within limits
+                            adjusted_temperature = max(self._min_temperature, min(self._max_temperature, adjusted_temperature))
+                            _LOGGER.debug(
+                                "Temperature after offset '%s' clamped to range [%s, %s]",
+                                adjusted_temperature,
+                                self._min_temperature,
+                                self._max_temperature,
+                            )
+                        else:
+                            adjusted_temperature = "-"
+                        
                         target_temperature = convert_temp(
-                            temperature,
+                            adjusted_temperature,
                             self._ha_temperature_unit,
                             self._data_temperature_unit,
                             None,
                         )
                         _LOGGER.debug(
-                            "Input HA temperature '%s%s' converted into device temperature '%s%s'.",
+                            "Input HA temperature '%s%s' (with offset %s) converted into device temperature '%s%s'.",
                             temperature,
                             self._ha_temperature_unit,
+                            offset,
                             target_temperature,
                             self._data_temperature_unit,
                         )
