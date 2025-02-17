@@ -56,6 +56,7 @@ PRECISION_DOUBLE = 2
 DOMAIN = "smartir"
 _LOGGER = logging.getLogger(__name__)
 
+
 def temp_offset_validator(value):
     """Validate the temperature offset values."""
     if not isinstance(value, dict):
@@ -64,6 +65,7 @@ def temp_offset_validator(value):
         return {k: float(v) for k, v in value.items()}
     except (TypeError, ValueError) as err:
         raise vol.Invalid(f"Invalid temperature offset value: {err}")
+
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     {
@@ -79,9 +81,10 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
             CONF_POWER_SENSOR_DELAY, default=DEFAULT_POWER_SENSOR_DELAY
         ): cv.positive_int,
         vol.Optional(CONF_POWER_SENSOR_RESTORE_STATE, default=True): cv.boolean,
-        vol.Optional(CONF_TEMPERATURE_OFFSET, default={}): temp_offset_validator
+        vol.Optional(CONF_TEMPERATURE_OFFSET, default={}): temp_offset_validator,
     }
 )
+
 
 async def async_setup_platform(
     hass: HomeAssistant, config: ConfigType, async_add_entities, discovery_info=None
@@ -112,11 +115,12 @@ async def async_setup_platform(
             _LOGGER.error(
                 "Invalid mode in temperature_offset configuration: %s. Valid modes are: %s",
                 mode,
-                operation_modes
+                operation_modes,
             )
             return
 
     async_add_entities([SmartIRClimate(hass, config, device_data)])
+
 
 class SmartIRClimate(ClimateEntity, RestoreEntity):
     _attr_should_poll = False
@@ -143,18 +147,24 @@ class SmartIRClimate(ClimateEntity, RestoreEntity):
         self._temperature_unit = hass.config.units.temperature_unit
         # Get the processed temperature offsets
         self._temperature_offset = config.get(CONF_TEMPERATURE_OFFSET, {})
-        _LOGGER.debug("Initialized with temperature offsets: %s", self._temperature_offset)
-        
+        _LOGGER.debug(
+            "Initialized with temperature offsets: %s", self._temperature_offset
+        )
+
         cleaned_offsets = {}
         for mode, offset in self._temperature_offset.items():
             try:
                 if isinstance(offset, str):
-                    offset = offset.replace('+', '')
+                    offset = offset.replace("+", "")
                 cleaned_offsets[mode] = float(offset)
-                _LOGGER.debug("Stored temperature offset for mode %s: %s", mode, cleaned_offsets[mode])
+                _LOGGER.debug(
+                    "Stored temperature offset for mode %s: %s",
+                    mode,
+                    cleaned_offsets[mode],
+                )
             except (ValueError, TypeError) as ex:
                 _LOGGER.error("Failed to process offset for mode %s: %s", mode, ex)
-        
+
         self._temperature_offset = cleaned_offsets
 
         self._state = STATE_OFF
@@ -750,7 +760,7 @@ class SmartIRClimate(ClimateEntity, RestoreEntity):
                                 "Applying temperature offset of %s for mode %s (current temp: %s)",
                                 offset,
                                 hvac_mode,
-                                temperature
+                                temperature,
                             )
 
                         # Store original temperature for later use
@@ -760,15 +770,18 @@ class SmartIRClimate(ClimateEntity, RestoreEntity):
                         if temperature != "-":
                             adjusted_temperature = temperature + offset
                             # Ensure adjusted temperature stays within limits
-                            adjusted_temperature = max(self._min_temperature, min(self._max_temperature, adjusted_temperature))
+                            adjusted_temperature = max(
+                                self._min_temperature,
+                                min(self._max_temperature, adjusted_temperature),
+                            )
                             _LOGGER.debug(
                                 "Temperature adjusted from %s to %s (after offset and limits)",
                                 temperature,
-                                adjusted_temperature
+                                adjusted_temperature,
                             )
                         else:
                             adjusted_temperature = "-"
-                        
+
                         target_temperature = convert_temp(
                             adjusted_temperature,
                             self._ha_temperature_unit,

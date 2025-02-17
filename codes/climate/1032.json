@@ -1,38 +1,15 @@
 {
   "manufacturer": "Panasonic",
-  "supportedModels": [
-    "S-100PK2E5B"
-  ],
+  "supportedModels": ["S-100PK2E5B"],
   "supportedController": "Broadlink",
   "commandsEncoding": "Base64",
   "temperatureUnit": "C",
   "minTemperature": 16.0,
   "maxTemperature": 30.0,
   "precision": 1.0,
-  "operationModes": [
-    "auto",
-    "heat",
-    "cool",
-    "dry",
-    "fan_only"
-  ],
-  "fanModes": [
-    "auto",
-    "Minimum",
-    "Low",
-    "Medium",
-    "High",
-    "Maximum"
-  ],
-  "swingModes": [
-    "auto",
-    "Stop",
-    "Top",
-    "High",
-    "Medium",
-    "Low",
-    "Bottom"
-  ],
+  "operationModes": ["auto", "heat", "cool", "dry", "fan_only"],
+  "fanModes": ["auto", "Minimum", "Low", "Medium", "High", "Maximum"],
+  "swingModes": ["auto", "Stop", "Top", "High", "Medium", "Low", "Bottom"],
   "commands": {
     "off": "JgAGAWw4DA8NDwwPDQ8MEAwPDSoNDwwPDQ8MDw0QDA8NDwwQDA8MEAwPDSoNDwwrDA8NDw0PDCsMDw0PDA8NDwwPDQ8MKw0PDSsMKwwPDQ8MKwwQDA8NKg0PDA8NKg0PDBAMDwwQDA8NKg4ODCsMKwwQDA8NKw0PDA8NDw0ODQ8MDw0rDCsMDw0PDA8ODgwQDA8MEA0ODBAMDw0PDQ8NDwwPDQ8MDw0qDQ8NDwwPDQ8MDw0PDA8NKg0rDQ4NKg0qDikNDwwQDA8NKw0PDA8NDwwPDQ8MDw0rDCsMKwwPDQ8MDw0PDCsNKg0qDSoNDwwQDA8MKw0QDCsMDw0qDQ8MDw0rDCsMDw0ADQU=",
     "on": "JgAGAW03Dg4MEAwPDQ8MDw0PDCsMDw0PDBAMDw0QDA8MEAwPDQ8MDw0PDCsMDw0rDA8NDwwPDSoNDwwPDQ8MEAwPDQ8MKwwQDSoNKg0PDBAMKwwPDQ8MDw0qDQ8MDw0PDBAMKwwPDQ8MDw0PDCsMEAwrDBAMEAwPDQ8MDw0PDA8NDwwrDCsNDwwPDQ8MDw0PDA8NDwwQDA8NDwwQDQ8MDw0PDA8NDwwrDCsNKg0PDA8NDwwPDQ8MKw0PDCsMDw4pDSoNDwwQDBAMKw0PDA8NDwwPDQ8MDw0rDCsMKwwPDQ8MDw0PDCsNKg0qDikNDw0ODQ8MEA0PDCsNDwwrDA8NKg0PDCsNDwwADQU=",
